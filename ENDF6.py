@@ -55,6 +55,7 @@ def read_line(l):
     return [read_float(l[s]) for s in slices['data']]
 
 def read_table(lines):
+    import numpy
     """
     Parse tabulated data in a section
     https://t2.lanl.gov/nis/endf/intro07.html
@@ -90,7 +91,7 @@ def read_table(lines):
         y.append(f[3])
         x.append(f[4])
         y.append(f[5])
-    return x[0:np], y[0:np]
+    return numpy.array(x[0:np]), numpy.array(y[0:np])
 
 def find_section(lines, MF=3, MT=3):
     """Locate and return a certain section"""
