@@ -35,24 +35,35 @@ MT labels an ENDF section, usually used to hold different reactions, e.g.
     MT=102 radiative capture
 """
 
+import numpy as np
+
+
 slices = {
-    'MAT' : slice(66,70),
-    'MF'  : slice(70,72),
-    'MT'  : slice(72,75),
-    'line': slice(75,80),
-    'content' : slice(0,66),
-    'data' : (slice(0,11), slice(11,22), slice(22,33), slice(33,44), slice(44,55), slice(55,66))}
+    'MAT': slice(66, 70),
+    'MF': slice(70, 72),
+    'MT': slice(72, 75),
+    'line': slice(75, 80),
+    'content': slice(0, 66),
+    'data': (slice(0, 11), slice(11, 22), slice(22, 33), slice(33, 44), slice(44, 55), slice(55, 66))}
+
 
 def read_float(v):
     """
     Convert ENDF6 string to float
-    (the ENDF6 float representation omits the e for exponent and may contain blanks)
     """
-    return float( v[0]+v[1:].replace(' ', '').replace('+', 'e+').replace('-', 'e-') )
+    if v.strip() == '':
+        return 0.
+    try:
+        return float(v)
+    except ValueError:
+        # ENDF6 may omit the e for exponent
+        return float(v[0] + v[1:].replace('+', 'e+').replace('-', 'e-'))  # don't replace leading negative sign
+
 
 def read_line(l):
     """Read first 6*11 characters of a line as floats"""
     return [read_float(l[s]) for s in slices['data']]
+
 
 def read_table(lines):
     import numpy
@@ -68,8 +79,8 @@ def read_table(lines):
     # header line 2: Q-value and some counts
     # [MAT, 3, MT/ QM, QI, 0, LR, NR, NP/ EINT/ S(E)] TAB1
     f = read_line(lines[1])
-    ni = int(f[4])  # number of interpolation sections
-    np = int(f[5])  # number of data points
+    nS = int(f[4])  # number of interpolation sections
+    nP = int(f[5])  # number of data points
 
     # header line 3: interpolation information
     # [MAT, 3, 0/ 0.0, 0.0, 0, 0, 0, 0] SEND
@@ -83,7 +94,7 @@ def read_table(lines):
     # data lines
     x = []
     y = []
-    for l in lines[3:-1]:
+    for l in lines[3:]:
         f = read_line(l)
         x.append(f[0])
         y.append(f[1])
@@ -91,27 +102,38 @@ def read_table(lines):
         y.append(f[3])
         x.append(f[4])
         y.append(f[5])
-    return numpy.array(x[0:np]), numpy.array(y[0:np])
+    return np.array(x[:nP]), np.array(y[:nP])
+
+
+def find_file(lines, MF=1):
+    """Locate and return a certain file"""
+    v = [l[slices['MF']] for l in lines]
+    n = len(v)
+    cmpstr = '%2s' % MF       # search string
+    i0 = v.index(cmpstr)            # first occurrence
+    i1 = n - v[::-1].index(cmpstr)  # last occurrence
+    return lines[i0: i1]
+
 
 def find_section(lines, MF=3, MT=3):
     """Locate and return a certain section"""
-    mfmt = [l[70:75] for l in lines]
-    n = len(mfmt)
+    v = [l[70:75] for l in lines]
+    n = len(v)
     cmpstr = '%2s%3s' % (MF, MT)       # search string
-    i0 = mfmt.index(cmpstr)            # first occurrence
-    i1 = n - mfmt[::-1].index(cmpstr)  # last occurrence
-    return lines[i0 : i1]
+    i0 = v.index(cmpstr)            # first occurrence
+    i1 = n - v[::-1].index(cmpstr)  # last occurrence
+    return lines[i0: i1]
+
 
 def list_content(lines):
     """Return set of unique tuples (MAT, MF, MT)"""
     s0 = slices['MAT']
     s1 = slices['MF']
     s2 = slices['MT']
-    content = set( ((int(l[s0]), int(l[s1]), int(l[s2])) for l in lines) )
+    content = set(((int(l[s0]), int(l[s1]), int(l[s2])) for l in lines))
 
     # remove section delimiters
     for c in content.copy():
         if 0 in c:
             content.discard(c)
-
     return content
